@@ -212,7 +212,7 @@ def main():
     if st.button("Process"):
         if jd:
             df_sorted = process_JD_and_get_matches(jd,model)
-            chatgpt_filter(df_sorted)
+            #chatgpt_filter(df_sorted)
             store_to_sqlite(df_sorted)
             #st.write(df_sorted)
         else:
