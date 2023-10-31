@@ -26,10 +26,47 @@ import plotly.express as px
 #!pip install slate3k
 
 
+def save_uploaded_files(uploaded_files):
+    for uploaded_file in uploaded_files:
+        with open(os.path.join('./CV', uploaded_file.name), 'wb') as f:
+            f.write(uploaded_file.getvalue())
+        st.sidebar.success(f"Archivo {uploaded_file.name} guardado con éxito")
+
+
+def delete_files_in_directory(directory):
+    for filename in os.listdir(directory):
+        file_path = os.path.join(directory, filename)
+        try:
+            if os.path.isfile(file_path):
+                os.unlink(file_path)
+                st.sidebar.success(f"Archivo {filename} eliminado con éxito")
+        except Exception as e:
+            st.error(f"Error al eliminar el archivo {filename}: {e}")
+
+
+
 
 image = Image.open('logo.png')
 
 st.sidebar.image(image, caption=' ', width=200)
+
+uploaded_files=st.sidebar.file_uploader("Upload CVs", accept_multiple_files=True, type="pdf", key=None, help=None, on_change=None, args=None, kwargs=None, disabled=False, label_visibility="collapsed")
+
+language = st.sidebar.radio(
+    "Source language",
+    ["Spanish", "English"],
+    index=None,
+)
+
+if uploaded_files:
+        if st.sidebar.button('Guardar PDFs'):
+            save_uploaded_files(uploaded_files)
+
+
+if st.sidebar.button('Borrar CVs'):
+        delete_files_in_directory('./CV')
+
+
 
 conn = sqlite3.connect('pdf_database.db')
 cursor = conn.cursor()
@@ -121,7 +158,7 @@ def evaluate_candidate(input_CV,input_JD,model):
 
 
 
-def process_JD_and_get_matches(jd_en,model):
+def process_JD_and_get_matches(jd,jd_en,model):
     all_files = os.listdir(path_to_folder)
     df = pd.DataFrame(columns=['Filename', 'MatchValue'])
     # Filtra solo los archivos PDF
@@ -136,16 +173,21 @@ def process_JD_and_get_matches(jd_en,model):
             for i in range(len(pdf.pages)):
                 pageObj = pdf.pages[i]
                 text_to_translate=pageObj.extract_text()
-                print("longitud " + str(len(text_to_translate)))
-                if len(text_to_translate)<5000 and len(text_to_translate)>0:
-                    resume_en += translate_text(text_to_translate,'es','en')
-                if len(text_to_translate)>5000:
-                    resume_en += translate_text(text_to_translate[:5000],'es','en')
-
+                if language=='Spanish':
+                    print("longitud " + str(len(text_to_translate)))
+                    if len(text_to_translate)<5000 and len(text_to_translate)>0:
+                        resume_en += translate_text(text_to_translate,'es','en')
+                    if len(text_to_translate)>5000:
+                        resume_en += translate_text(text_to_translate[:5000],'es','en')
+                else: 
+                    resume_en+=text_to_translate
         #print("longitud" + str(len(resume_en)))
         #resume_en=translate_text(resume,'es','en')
         input_CV = preprocess_text(resume_en)
-        input_JD = preprocess_text(jd_en)
+        if language=='Spanish':
+            input_JD = preprocess_text(jd_en)
+        else:
+            input_JD = preprocess_text(jd)
         match=evaluate_candidate(input_CV,input_JD, model)
         print(match)
         df.loc[j] = {'Filename': pdf_file, 'MatchValue': match}
@@ -208,10 +250,10 @@ def main():
 
     # Text area for the user to input the job description
     jd = st.text_area("Job Description", "")
-
+    jd_en=translate_text(jd,'es','en')
     if st.button("Process"):
         if jd:
-            df_sorted = process_JD_and_get_matches(jd,model)
+            df_sorted = process_JD_and_get_matches(jd,jd_en,model)
             #chatgpt_filter(df_sorted)
             store_to_sqlite(df_sorted)
             #st.write(df_sorted)
@@ -224,7 +266,7 @@ def main():
     if not df_sorted_from_db.empty:
         selected_pdf = st.selectbox('Elige un PDF:', df_sorted_from_db['Filename'].tolist())
         pdf_url = f"http://localhost:8081/CV/{selected_pdf}"
-        st.markdown(f'<iframe src="{pdf_url}" width="700" height="400"></iframe>', unsafe_allow_html=True)
+        st.markdown(f'<iframe src="{pdf_url}" width="700" height="900"></iframe>', unsafe_allow_html=True)
         fig = px.scatter(df_sorted_from_db, x="Filename", y="MatchValue", title="Match Values por Filename", height=1000)
         fig.update_traces(mode="lines+markers")
         st.plotly_chart(fig)
