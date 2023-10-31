@@ -14,9 +14,22 @@ nltk.download('punkt')
 from googletrans import Translator
 import os
 import streamlit as st
+import sqlite3
+import http.server
+import socketserver
+import threading
 #import slate3k as slate
 #!pip install slate3k
 
+conn = sqlite3.connect('cv_db.db')
+cursor = conn.cursor()
+
+cursor.execute('''
+CREATE TABLE IF NOT EXISTS mis_documentos (
+    id INTEGER PRIMARY KEY,
+    Filename TEXT
+)
+''')
 
 
 path_to_folder = './CV/'
@@ -27,6 +40,20 @@ def translate_text(text,src,dest):
         pass
     else:
         return translator.translate(text, src=src, dest=dest).text
+    
+
+def delete_table_contents():
+    try:
+        conn = sqlite3.connect('pdf_database.db')
+        cursor = conn.cursor()
+        
+        cursor.execute('DELETE FROM pdf_list')
+        conn.commit()
+        conn.close()
+        
+        return "Contenido de la tabla borrado con éxito."
+    except Exception as e:
+        return f"Error al borrar el contenido de la tabla: {e}"
 
 
 
@@ -78,27 +105,66 @@ def process_JD_and_get_matches(jd_en,model):
                 if len(text_to_translate)>5000:
                     resume_en += translate_text(text_to_translate[:5000],'es','en')
 
-    #print("longitud" + str(len(resume_en)))
-    #resume_en=translate_text(resume,'es','en')
-    input_CV = preprocess_text(resume_en)
-    input_JD = preprocess_text(jd_en)
-    match=evaluate_candidate(input_CV,input_JD, model)
-    print(match)
-    df.loc[j] = {'Filename': pdf_file, 'MatchValue': match}
-    j=j+1
-    print("="*50)
+        #print("longitud" + str(len(resume_en)))
+        #resume_en=translate_text(resume,'es','en')
+        input_CV = preprocess_text(resume_en)
+        input_JD = preprocess_text(jd_en)
+        match=evaluate_candidate(input_CV,input_JD, model)
+        print(match)
+        df.loc[j] = {'Filename': pdf_file, 'MatchValue': match}
+        j=j+1
+        print("="*50)
     df['MatchValue'] = df['MatchValue'].astype(float)
     df_sorted = df.sort_values(by='MatchValue', ascending=False)
     return df_sorted
 
 
+def store_to_sqlite(df):
+    conn = sqlite3.connect('pdf_database.db')
+    df.to_sql('pdf_list', conn, if_exists='replace', index=False)  # Guarda el dataframe en la tabla 'pdf_list'
+    conn.close()
 
 
+def read_from_sqlite():
+    conn = sqlite3.connect('pdf_database.db')
+    df = pd.read_sql('SELECT * FROM pdf_list', conn)
+    conn.close()
+    return df
 
+def init_db():
+    conn = sqlite3.connect('pdf_database.db')
+    cursor = conn.cursor()
+    
+    # Crear la tabla "pdf_list" si no existe
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS pdf_list (
+            Filename TEXT
+        )
+    ''')
+    
+    conn.commit()
+    conn.close()
 
+def start_pdf_server(port=8080):
+    handler = http.server.SimpleHTTPRequestHandler
+    httpd = socketserver.TCPServer(("", port), handler)
+    thread = threading.Thread(target=httpd.serve_forever)
+    thread.start()
+    print(f"PDF server started at port {port}")
+
+# Inicia el servidor al comienzo del script
 
 
 def main():
+    selected_pdf=pd.DataFrame()
+    init_db()
+    try:
+        start_pdf_server()
+    except:
+        pass
+    
+
+    df_sorted=pd.DataFrame
     model = Doc2Vec.load('cv_job_maching.model')
     st.title("CV Sorter")
     st.write("Insert the job description and get the matching CVs.")
@@ -109,9 +175,18 @@ def main():
     if st.button("Process"):
         if jd:
             df_sorted = process_JD_and_get_matches(jd,model)
-            st.write(df_sorted)
+            store_to_sqlite(df_sorted)
+            #st.write(df_sorted)
         else:
             st.write("Please enter a job description to process.")
-
+    if st.button('Borrar contenido de la tabla'):
+        message = delete_table_contents()
+        st.write(message)
+    df_sorted_from_db = read_from_sqlite()
+    if not df_sorted_from_db.empty:
+        selected_pdf = st.selectbox('Elige un PDF:', df_sorted_from_db['Filename'].tolist())
+        pdf_url = f"http://localhost:8080/CV/{selected_pdf}"
+        st.markdown(f'<iframe src="{pdf_url}" width="700" height="400"></iframe>', unsafe_allow_html=True)
+        st.write(df_sorted_from_db)
 if __name__ == "__main__":
     main()
