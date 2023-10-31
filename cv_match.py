@@ -182,7 +182,7 @@ def init_db():
     conn.commit()
     conn.close()
 
-def start_pdf_server(port=8080):
+def start_pdf_server(port=8081):
     handler = http.server.SimpleHTTPRequestHandler
     httpd = socketserver.TCPServer(("", port), handler)
     thread = threading.Thread(target=httpd.serve_forever)
@@ -223,7 +223,7 @@ def main():
     df_sorted_from_db = read_from_sqlite()
     if not df_sorted_from_db.empty:
         selected_pdf = st.selectbox('Elige un PDF:', df_sorted_from_db['Filename'].tolist())
-        pdf_url = f"http://localhost:8080/CV/{selected_pdf}"
+        pdf_url = f"http://localhost:8081/CV/{selected_pdf}"
         st.markdown(f'<iframe src="{pdf_url}" width="700" height="400"></iframe>', unsafe_allow_html=True)
         fig = px.scatter(df_sorted_from_db, x="Filename", y="MatchValue", title="Match Values por Filename", height=1000)
         fig.update_traces(mode="lines+markers")
