@@ -18,10 +18,20 @@ import sqlite3
 import http.server
 import socketserver
 import threading
+from PIL import Image
+import openai
+openai.api_key = "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"
+import plotly.express as px
 #import slate3k as slate
 #!pip install slate3k
 
-conn = sqlite3.connect('cv_db.db')
+
+
+image = Image.open('logo.png')
+
+st.sidebar.image(image, caption=' ', width=200)
+
+conn = sqlite3.connect('pdf_database.db')
 cursor = conn.cursor()
 
 cursor.execute('''
@@ -30,6 +40,33 @@ CREATE TABLE IF NOT EXISTS mis_documentos (
     Filename TEXT
 )
 ''')
+
+
+def chatgpt_filter(df, path_folder='./CV'):
+    """Imprime el contenido de los primeros 5 archivos PDF en el DataFrame.
+
+    Args:
+    - df (pd.DataFrame): DataFrame con los nombres de los archivos.
+    - path_folder (str): Ruta del directorio donde están los archivos, por defecto es el directorio actual.
+
+    Returns:
+    None.
+    """
+    # Selecciona los primeros 5 nombres de archivos
+    filenames = df['Filename'].head(5)
+    
+    for filename in filenames:
+        full_path = f"{path_folder}/{filename}"
+        try:
+            with open(full_path, 'rb') as file:
+                reader = PyPDF2.PdfReader(file)
+                for page_num in range(reader.numPages):
+                    page = reader.getPage(page_num)
+                    print(page.extractText())
+        except Exception as e:
+            print(f"Error al abrir el archivo {filename}. Error: {e}")
+
+
 
 
 path_to_folder = './CV/'
@@ -175,6 +212,7 @@ def main():
     if st.button("Process"):
         if jd:
             df_sorted = process_JD_and_get_matches(jd,model)
+            chatgpt_filter(df_sorted)
             store_to_sqlite(df_sorted)
             #st.write(df_sorted)
         else:
@@ -187,6 +225,9 @@ def main():
         selected_pdf = st.selectbox('Elige un PDF:', df_sorted_from_db['Filename'].tolist())
         pdf_url = f"http://localhost:8080/CV/{selected_pdf}"
         st.markdown(f'<iframe src="{pdf_url}" width="700" height="400"></iframe>', unsafe_allow_html=True)
+        fig = px.scatter(df_sorted_from_db, x="Filename", y="MatchValue", title="Match Values por Filename", height=1000)
+        fig.update_traces(mode="lines+markers")
+        st.plotly_chart(fig)
         st.write(df_sorted_from_db)
 if __name__ == "__main__":
     main()
