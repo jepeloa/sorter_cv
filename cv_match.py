@@ -21,9 +21,7 @@ import threading
 from PIL import Image
 import openai
 openai.api_key = "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"
-from fpdf import FPDF
 import plotly.express as px
-from pyresparser import ResumeParser
 #import slate3k as slate
 #!pip install slate3k
 
@@ -79,6 +77,32 @@ CREATE TABLE IF NOT EXISTS mis_documentos (
     Filename TEXT
 )
 ''')
+
+
+def chatgpt_filter(df, path_folder='./CV'):
+    """Imprime el contenido de los primeros 5 archivos PDF en el DataFrame.
+
+    Args:
+    - df (pd.DataFrame): DataFrame con los nombres de los archivos.
+    - path_folder (str): Ruta del directorio donde están los archivos, por defecto es el directorio actual.
+
+    Returns:
+    None.
+    """
+    # Selecciona los primeros 5 nombres de archivos
+    filenames = df['Filename'].head(5)
+    
+    for filename in filenames:
+        full_path = f"{path_folder}/{filename}"
+        try:
+            with open(full_path, 'rb') as file:
+                reader = PyPDF2.PdfReader(file)
+                for page_num in range(reader.numPages):
+                    page = reader.getPage(page_num)
+                    print(page.extractText())
+        except Exception as e:
+            print(f"Error al abrir el archivo {filename}. Error: {e}")
+
 
 
 
@@ -139,14 +163,31 @@ def process_JD_and_get_matches(jd,jd_en,model):
     df = pd.DataFrame(columns=['Filename', 'MatchValue'])
     # Filtra solo los archivos PDF
     pdf_files = [file for file in all_files if file.endswith('.pdf')]
-    
     j=0 #contador de archivos
-    st.progress(j)
     for pdf_file in pdf_files:
-        print(f"procesando CV: {pdf_file}")
-        resume_skills = str(ResumeParser(os.path.join('./CV/', pdf_file)).get_extracted_data())
-        input_CV = preprocess_text(jd)
-        input_JD = preprocess_text(resume_skills)
+        pdf_path = os.path.join(path_to_folder, pdf_file)
+    
+        with open(pdf_path, 'rb') as f:
+            pdf = PyPDF2.PdfReader(f)
+            resume_en = ''
+            for i in range(len(pdf.pages)):
+                pageObj = pdf.pages[i]
+                text_to_translate=pageObj.extract_text()
+                if language=='Spanish':
+                    print("longitud " + str(len(text_to_translate)))
+                    if len(text_to_translate)<5000 and len(text_to_translate)>0:
+                        resume_en += translate_text(text_to_translate,'es','en')
+                    if len(text_to_translate)>5000:
+                        resume_en += translate_text(text_to_translate[:5000],'es','en')
+                else: 
+                    resume_en+=text_to_translate
+        #print("longitud" + str(len(resume_en)))
+        #resume_en=translate_text(resume,'es','en')
+        input_CV = preprocess_text(resume_en)
+        if language=='Spanish':
+            input_JD = preprocess_text(jd_en)
+        else:
+            input_JD = preprocess_text(jd)
         match=evaluate_candidate(input_CV,input_JD, model)
         print(match)
         df.loc[j] = {'Filename': pdf_file, 'MatchValue': match}
@@ -161,14 +202,6 @@ def store_to_sqlite(df):
     conn = sqlite3.connect('pdf_database.db')
     df.to_sql('pdf_list', conn, if_exists='replace', index=False)  # Guarda el dataframe en la tabla 'pdf_list'
     conn.close()
-
-
-def texto_a_pdf(texto, nombre_archivo):
-    pdf = FPDF()
-    pdf.add_page()
-    pdf.set_font("Arial", size=12)
-    pdf.multi_cell(0, 10, texto)  # multi_cell divide el texto en varias líneas si es necesario
-    pdf.output(nombre_archivo)
 
 
 def read_from_sqlite():
@@ -217,11 +250,7 @@ def main():
 
     # Text area for the user to input the job description
     jd = st.text_area("Job Description", "")
-
-    #texto_a_pdf(str(jd), './CV/JD.pdf')
-
     jd_en=translate_text(jd,'es','en')
-    
     if st.button("Process"):
         if jd:
             df_sorted = process_JD_and_get_matches(jd,jd_en,model)
