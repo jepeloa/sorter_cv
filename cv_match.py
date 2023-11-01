@@ -265,7 +265,7 @@ def main():
     df_sorted_from_db = read_from_sqlite()
     if not df_sorted_from_db.empty:
         selected_pdf = st.selectbox('Elige un PDF:', df_sorted_from_db['Filename'].tolist())
-        pdf_url = f"http://127.0.0.1:8081/CV/{selected_pdf}"
+        pdf_url = f"http://143.198.139.51:8081/CV/{selected_pdf}"
         st.markdown(f'<iframe src="{pdf_url}" width="700" height="900"></iframe>', unsafe_allow_html=True)
         fig = px.scatter(df_sorted_from_db, x="Filename", y="MatchValue", title="Match Values por Filename", height=1000)
         fig.update_traces(mode="lines+markers")
