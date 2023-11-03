@@ -22,7 +22,7 @@ from PIL import Image
 import openai
 openai.api_key = "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"
 import plotly.express as px
-from st_aggrid import GridOptionsBuilder, AgGrid, GridUpdateMode, DataReturnMode
+#from st_aggrid import GridOptionsBuilder, AgGrid, GridUpdateMode, DataReturnMode
 #import slate3k as slate
 #!pip install slate3k
 from pyresparser import ResumeParser
