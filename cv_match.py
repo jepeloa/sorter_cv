@@ -279,9 +279,9 @@ def main():
     if st.button('Borrar contenido de la tabla'):
         message = delete_table_contents()
         st.write(message)
-    if st.button("Skills"):
-        skills_df=obtain_skills()
-        st.write(skills_df)
+    #if st.button("Skills"):
+    #    skills_df=obtain_skills()
+    #    st.write(skills_df)
 
     df_sorted_from_db = read_from_sqlite()
     if not df_sorted_from_db.empty:
