@@ -22,9 +22,12 @@ from PIL import Image
 import openai
 openai.api_key = "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"
 import plotly.express as px
+from st_aggrid import GridOptionsBuilder, AgGrid, GridUpdateMode, DataReturnMode
 #import slate3k as slate
 #!pip install slate3k
+from pyresparser import ResumeParser
 
+#Probar con affina pip install affinda
 
 def save_uploaded_files(uploaded_files):
     for uploaded_file in uploaded_files:
@@ -52,11 +55,11 @@ st.sidebar.image(image, caption=' ', width=200)
 
 uploaded_files=st.sidebar.file_uploader("Upload CVs", accept_multiple_files=True, type="pdf", key=None, help=None, on_change=None, args=None, kwargs=None, disabled=False, label_visibility="collapsed")
 
-language = st.sidebar.radio(
-    "Source language",
-    ["Spanish", "English"],
-    index=None,
-)
+#language = st.sidebar.radio(
+#    "Source language",
+#    ["Spanish", "English"],
+#    index=None,
+#)
 
 if uploaded_files:
         if st.sidebar.button('Guardar PDFs'):
@@ -150,11 +153,23 @@ def preprocess_text(text):
 def evaluate_candidate(input_CV,input_JD,model):
     v1 = model.infer_vector(input_CV.split())
     v2 = model.infer_vector(input_JD.split())
-    similarity = 100*(np.dot(np.array(v1), np.array(v2))) / (norm(np.array(v1)) * norm(np.array(v2)))
+    similarity = 100*((np.dot(np.array(v1), np.array(v2))) / (norm(np.array(v1)) * norm(np.array(v2))))
     return round(similarity, 2)
 
 
-
+def obtain_skills():
+    data = []
+# Iterar sobre todos los archivos en la carpeta
+    print(os.listdir(path_to_folder))
+    for file_name in os.listdir(path_to_folder):
+        file_path = os.path.join(path_to_folder, file_name)
+        if file_path.endswith('.pdf'):
+            # Extraer datos del CV usando pyresparser
+            resume_data = ResumeParser(file_path).get_extracted_data()
+            skills = resume_data.get('skills', [])
+            data.append([file_name, skills])
+    df = pd.DataFrame(data, columns=['Filename', 'Skills'])
+    return df
 
 
 
@@ -169,25 +184,27 @@ def process_JD_and_get_matches(jd,jd_en,model):
     
         with open(pdf_path, 'rb') as f:
             pdf = PyPDF2.PdfReader(f)
-            resume_en = ''
+            resume = ''
             for i in range(len(pdf.pages)):
                 pageObj = pdf.pages[i]
                 text_to_translate=pageObj.extract_text()
-                if language=='Spanish':
-                    print("longitud " + str(len(text_to_translate)))
-                    if len(text_to_translate)<5000 and len(text_to_translate)>0:
-                        resume_en += translate_text(text_to_translate,'es','en')
-                    if len(text_to_translate)>5000:
-                        resume_en += translate_text(text_to_translate[:5000],'es','en')
-                else: 
-                    resume_en+=text_to_translate
+                #text_to_translate = text_to_translate.replace("\n", " ")
+                resume+=text_to_translate
+               # if language=='Spanish':
+               #     print("longitud " + str(len(text_to_translate)))
+               #     if len(text_to_translate)<5000 and len(text_to_translate)>0:
+               #         resume_en += translate_text(text_to_translate,'es','en')
+               #     if len(text_to_translate)>5000:
+               #         resume_en += translate_text(text_to_translate[:5000],'es','en')
+               # else: 
+               #     resume_en+=text_to_translate
         #print("longitud" + str(len(resume_en)))
         #resume_en=translate_text(resume,'es','en')
-        input_CV = preprocess_text(resume_en)
-        if language=='Spanish':
-            input_JD = preprocess_text(jd_en)
-        else:
-            input_JD = preprocess_text(jd)
+        input_CV = preprocess_text(resume)
+        #if language=='Spanish':
+        input_JD = preprocess_text(jd.replace("\n", " "))
+        #else:
+        #    input_JD = preprocess_text(jd_en)
         match=evaluate_candidate(input_CV,input_JD, model)
         print(match)
         df.loc[j] = {'Filename': pdf_file, 'MatchValue': match}
@@ -262,10 +279,14 @@ def main():
     if st.button('Borrar contenido de la tabla'):
         message = delete_table_contents()
         st.write(message)
+    if st.button("Skills"):
+        skills_df=obtain_skills()
+        st.write(skills_df)
+
     df_sorted_from_db = read_from_sqlite()
     if not df_sorted_from_db.empty:
         selected_pdf = st.selectbox('Elige un PDF:', df_sorted_from_db['Filename'].tolist())
-        pdf_url = f"http://143.198.139.51:8081/CV/{selected_pdf}"
+        pdf_url = f"http://localhost:8081/CV/{selected_pdf}"
         st.markdown(f'<iframe src="{pdf_url}" width="700" height="900"></iframe>', unsafe_allow_html=True)
         fig = px.scatter(df_sorted_from_db, x="Filename", y="MatchValue", title="Match Values por Filename", height=1000)
         fig.update_traces(mode="lines+markers")
