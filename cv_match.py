@@ -25,7 +25,7 @@ import plotly.express as px
 #from st_aggrid import GridOptionsBuilder, AgGrid, GridUpdateMode, DataReturnMode
 #import slate3k as slate
 #!pip install slate3k
-from pyresparser import ResumeParser
+#from pyresparser import ResumeParser
 
 #Probar con affina pip install affinda
 
