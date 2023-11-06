@@ -21,11 +21,12 @@ import threading
 from PIL import Image
 import openai
 openai.api_key = "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"
+#nlp = spacy.load('en_core_web_lg')
 import plotly.express as px
 #from st_aggrid import GridOptionsBuilder, AgGrid, GridUpdateMode, DataReturnMode
 #import slate3k as slate
 #!pip install slate3k
-#from pyresparser import ResumeParser
+from pyresparser import ResumeParser
 
 #Probar con affina pip install affinda
 
@@ -46,7 +47,7 @@ def delete_files_in_directory(directory):
         except Exception as e:
             st.error(f"Error al eliminar el archivo {filename}: {e}")
 
-
+progress_bar = st.progress(0)
 
 
 image = Image.open('logo.png')
@@ -157,39 +158,37 @@ def evaluate_candidate(input_CV,input_JD,model):
     return round(similarity, 2)
 
 
-def obtain_skills():
+def obtain_skills(file_path,pdf_file):
     data = []
-# Iterar sobre todos los archivos en la carpeta
-    print(os.listdir(path_to_folder))
-    for file_name in os.listdir(path_to_folder):
-        file_path = os.path.join(path_to_folder, file_name)
-        if file_path.endswith('.pdf'):
-            # Extraer datos del CV usando pyresparser
-            resume_data = ResumeParser(file_path).get_extracted_data()
-            skills = resume_data.get('skills', [])
-            data.append([file_name, skills])
-    df = pd.DataFrame(data, columns=['Filename', 'Skills'])
-    return df
+    resume_data = ResumeParser(file_path).get_extracted_data()
+    skills = resume_data.get('skills', [])
+    skills = str(skills).replace(",", " ")
+    skills = str(skills).replace("""'""", "")
+    return skills
 
 
 
 def process_JD_and_get_matches(jd,jd_en,model):
     all_files = os.listdir(path_to_folder)
-    df = pd.DataFrame(columns=['Filename', 'MatchValue'])
+    df = pd.DataFrame(columns=['Filename', 'MatchValue', 'Skills'])
     # Filtra solo los archivos PDF
     pdf_files = [file for file in all_files if file.endswith('.pdf')]
     j=0 #contador de archivos
     for pdf_file in pdf_files:
         pdf_path = os.path.join(path_to_folder, pdf_file)
+        print(pdf_path)
+        skills_cv=obtain_skills(pdf_path,pdf_file)
+        print(skills_cv)
+        print(f"Nombre del CV:  {pdf_file} habilidades {skills_cv}")
     
-        with open(pdf_path, 'rb') as f:
-            pdf = PyPDF2.PdfReader(f)
-            resume = ''
-            for i in range(len(pdf.pages)):
-                pageObj = pdf.pages[i]
-                text_to_translate=pageObj.extract_text()
-                #text_to_translate = text_to_translate.replace("\n", " ")
-                resume+=text_to_translate
+        #with open(pdf_path, 'rb') as f:
+        #    pdf = PyPDF2.PdfReader(f)
+        #    resume = ''
+        #    for i in range(len(pdf.pages)):
+        #        pageObj = pdf.pages[i]
+        #        text_to_translate=pageObj.extract_text()
+        #        #text_to_translate = text_to_translate.replace("\n", " ")
+        #        resume+=text_to_translate
                # if language=='Spanish':
                #     print("longitud " + str(len(text_to_translate)))
                #     if len(text_to_translate)<5000 and len(text_to_translate)>0:
@@ -200,15 +199,24 @@ def process_JD_and_get_matches(jd,jd_en,model):
                #     resume_en+=text_to_translate
         #print("longitud" + str(len(resume_en)))
         #resume_en=translate_text(resume,'es','en')
-        input_CV = preprocess_text(resume)
+        input_CV = preprocess_text(skills_cv.encode('UTF-8').decode('utf-8'))
         #if language=='Spanish':
-        input_JD = preprocess_text(jd.replace("\n", " "))
+        input_JD = preprocess_text(jd)
         #else:
         #    input_JD = preprocess_text(jd_en)
-        match=evaluate_candidate(input_CV,input_JD, model)
+        input_JD=list(input_JD.split(" "))
+        match_scores = []
+        for word in input_JD:
+            # Calcula la coincidencia entre el CV y la palabra actual
+            match = evaluate_candidate(input_CV, word, model)
+            # Agrega la puntuación de coincidencia a la lista de puntuaciones
+            match_scores.append(match)
+        match=sum(match_scores) / len(match_scores) if match_scores else 0
+        #match=evaluate_candidate(input_CV,input_JD, model)
         print(match)
-        df.loc[j] = {'Filename': pdf_file, 'MatchValue': match}
+        df.loc[j] = {'Filename': pdf_file, 'MatchValue': match, 'Skills': skills_cv}
         j=j+1
+        progress_bar.progress(j,text=f"processing: {pdf_file}")
         print("="*50)
     df['MatchValue'] = df['MatchValue'].astype(float)
     df_sorted = df.sort_values(by='MatchValue', ascending=False)
@@ -279,9 +287,6 @@ def main():
     if st.button('Borrar contenido de la tabla'):
         message = delete_table_contents()
         st.write(message)
-    #if st.button("Skills"):
-    #    skills_df=obtain_skills()
-    #    st.write(skills_df)
 
     df_sorted_from_db = read_from_sqlite()
     if not df_sorted_from_db.empty:
