@@ -20,6 +20,10 @@ import socketserver
 import threading
 from PIL import Image
 import openai
+from spacy.lang.en.stop_words import STOP_WORDS
+from string import punctuation
+from collections import Counter
+from heapq import nlargest
 openai.api_key = "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"
 #nlp = spacy.load('en_core_web_lg')
 import plotly.express as px
@@ -27,8 +31,29 @@ import plotly.express as px
 #import slate3k as slate
 #!pip install slate3k
 from pyresparser import ResumeParser
+import re
+nlp=spacy.load('es')
 
 #Probar con affina pip install affinda
+
+def summarize_JD(jd):
+    text= re.sub(r'[^\w\s]', '', text)
+    doc=nlp(jd)
+    keyword = []
+    stopwords = list(STOP_WORDS)
+    pos_tag = ['PROPN', 'ADJ', 'NOUN', 'VERB']
+    for token in doc:
+        if(token.text in stopwords or token.text in punctuation):
+            continue
+        if(token.pos_ in pos_tag):
+            keyword.append(token.text)
+    freq_word = Counter(keyword)
+    #print(freq_word.most_common(5)[1][0])
+    jd_key=""
+    for i in range(5):
+        jd_key=jd_key+ ' ' +str(freq_word.most_common(5)[i][0])
+    return jd_key
+
 
 def save_uploaded_files(uploaded_files):
     for uploaded_file in uploaded_files:
@@ -275,6 +300,7 @@ def main():
 
     # Text area for the user to input the job description
     jd = st.text_area("Job Description", "")
+    jd=summarize_JD(jd)
     jd_en=translate_text(jd,'es','en')
     if st.button("Process"):
         if jd:
