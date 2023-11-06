@@ -10,7 +10,7 @@ import PyPDF2
 import re
 import plotly.graph_objects as go
 import nltk
-nltk.download('punkt')
+#nltk.download('punkt')
 from googletrans import Translator
 import os
 import streamlit as st
