@@ -216,7 +216,7 @@ def process_JD_and_get_matches(jd,jd_en,model):
         print(match)
         df.loc[j] = {'Filename': pdf_file, 'MatchValue': match, 'Skills': skills_cv}
         j=j+1
-        progress_bar.progress(j,text=f"processing: {pdf_file}")
+        progress_bar.progress(j*100/len(all_files),text=f"processing: {pdf_file}")
         print("="*50)
     df['MatchValue'] = df['MatchValue'].astype(float)
     df_sorted = df.sort_values(by='MatchValue', ascending=False)
